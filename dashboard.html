@@ -1,0 +1,608 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>全局安全统计 · LLM-Sec</title>
+  <style>
+    html { color-scheme: light; background: #f6f4ef; color: #1a1814; }
+    body {
+      margin: 0;
+      background: #f6f4ef;
+      color: #1a1814;
+      font-family: "WenQuanYi Micro Hei", "Droid Sans Fallback", "PingFang SC", "Microsoft YaHei", sans-serif;
+      font-size: 18px;
+      line-height: 1.5;
+    }
+    * { box-sizing: border-box; }
+    [hidden] { display: none !important; }
+    button, input, summary { font: inherit; color: inherit; }
+    .sample {
+      background: #fff3d6;
+      color: #5c3e0c;
+      border-bottom: 1px solid #ecd49a;
+    }
+    .sample p { margin: 0; padding: 8px 20px; font-size: 15px; }
+    .wrap { max-width: 1080px; margin: 0 auto; padding: 16px 20px 40px; }
+    .top {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px 16px;
+    }
+    .ranges { display: flex; flex-wrap: wrap; gap: 8px; }
+    .ranges button {
+      min-height: 44px;
+      padding: 8px 16px;
+      border: 1px solid #ddd4c8;
+      border-radius: 999px;
+      background: #fffcf8;
+      font-size: 18px;
+    }
+    .ranges button[aria-pressed="true"] {
+      background: #1a1814;
+      color: #fffcf8;
+      border-color: #1a1814;
+    }
+    .when-label { margin: 0; color: #5c564c; font-size: 16px; }
+    .custom { display: flex; flex-wrap: wrap; gap: 12px 18px; margin-top: 12px; }
+    .custom input {
+      margin-left: 6px;
+      padding: 6px 8px;
+      border: 1px solid #ddd4c8;
+      border-radius: 8px;
+      background: #fffcf8;
+    }
+    .err { margin: 8px 0 0; color: #9f2d2d; }
+    .verdict {
+      margin-top: 14px;
+      padding: 18px 22px 16px;
+      border-radius: 18px;
+    }
+    .kicker { margin: 0; font-size: 15px; font-weight: 700; }
+    .verdict h1 {
+      margin: 2px 0 0;
+      font-size: clamp(52px, 7vw, 80px);
+      line-height: 1.02;
+      font-weight: 700;
+    }
+    .verdict .say { margin: 8px 0 0; font-size: 20px; }
+    .verdict.unsafe { background: #fdeceb; color: #9f2d2d; }
+    .verdict.suspected { background: #fff4dc; color: #8a5a12; }
+    .verdict.suspected h1 { font-size: clamp(40px, 5.5vw, 64px); }
+    .verdict.safe { background: #e7f6ee; color: #0e6b45; }
+    .verdict.empty { background: #efece6; color: #1a1814; }
+    .verdict.empty h1 { font-size: clamp(40px, 5.5vw, 64px); }
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(6, 1fr);
+      gap: 10px;
+      margin: 14px 0 0;
+      padding: 0;
+      list-style: none;
+    }
+    .stats li {
+      background: #fffcf8;
+      border: 1px solid #e7e0d6;
+      border-radius: 14px;
+      padding: 12px 12px 10px;
+    }
+    .num { margin: 0; font-size: 36px; line-height: 1; font-weight: 700; color: #1a1814; }
+    .stats .hot .num { color: #9f2d2d; }
+    .name { margin: 8px 0 0; font-size: 16px; }
+    .hint { margin: 2px 0 0; color: #5c564c; font-size: 13px; }
+    .note { margin: 8px 0 0; color: #5c564c; font-size: 14px; }
+    h2 { margin: 18px 0 0; font-size: 20px; }
+    .sub { margin: 4px 0 0; color: #5c564c; font-size: 16px; }
+    .list { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+    .risk, .quiet {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      width: 100%;
+      text-align: left;
+      padding: 12px 14px;
+      border-radius: 12px;
+      background: #fffcf8;
+      border: 1px solid #e7e0d6;
+    }
+    .risk { border-left-width: 6px; }
+    .risk.unsafe { border-left-color: #c2453a; background: #fff8f7; }
+    .risk.suspected { border-left-color: #c4841d; background: #fffaf1; }
+    .quiet { border-left: 6px solid #8fbfa6; }
+    .line { font-size: 18px; }
+    .meta { color: #5c564c; font-size: 14px; margin-bottom: 2px; }
+    .side { text-align: right; white-space: nowrap; font-weight: 700; }
+    .risk.unsafe .side { color: #9f2d2d; }
+    .risk.suspected .side { color: #8a5a12; }
+    .quiet .side { color: #0e6b45; font-weight: 700; }
+    .open { display: block; font-size: 14px; font-weight: 700; }
+    .safe-fold { margin-top: 14px; }
+    .safe-fold summary {
+      cursor: pointer;
+      font-size: 18px;
+      color: #0e6b45;
+      padding: 8px 0;
+    }
+    .back {
+      min-height: 44px;
+      padding: 8px 16px;
+      border: 1px solid #ddd4c8;
+      border-radius: 999px;
+      background: #fffcf8;
+    }
+    .detail-body { margin-top: 14px; }
+    .detail-body h2 { margin-top: 18px; font-size: 18px; }
+    .detail-body p { margin: 6px 0 0; font-size: 20px; }
+    @media (max-width: 980px) {
+      .stats { grid-template-columns: repeat(3, 1fr); }
+    }
+    @media (max-width: 640px) {
+      .wrap { padding-left: 14px; padding-right: 14px; }
+      .stats { grid-template-columns: 1fr 1fr; }
+      .num { font-size: 32px; }
+      .risk, .quiet { align-items: flex-start; }
+      .side { text-align: left; }
+    }
+  </style>
+</head>
+<body bgcolor="#f6f4ef" text="#1a1814" style="margin:0;background:#f6f4ef;color:#1a1814;">
+  <div class="sample">
+    <p><strong>示例</strong>　下面的数字和记录是编的，用来看这个界面。不是真实监测。</p>
+  </div>
+  <main class="wrap">
+    <div id="home">
+      <div class="top">
+        <div class="ranges" role="group" aria-label="时间范围">
+          <button type="button" id="range-day" data-range="day">一天</button>
+          <button type="button" id="range-week" data-range="week" aria-pressed="true">一周</button>
+          <button type="button" id="range-month" data-range="month">一个月</button>
+          <button type="button" id="range-custom" data-range="custom">自定义</button>
+        </div>
+        <p id="range-label" class="when-label"></p>
+      </div>
+      <div id="custom" class="custom" hidden>
+        <label>开始日期 <input type="date" id="start"></label>
+        <label>结束日期 <input type="date" id="end"></label>
+      </div>
+      <p id="range-error" class="err" hidden>开始日期晚于结束日期，请改一下。</p>
+
+      <section id="verdict" class="verdict unsafe">
+        <p class="kicker">全局安全统计</p>
+        <h1 id="verdict-word">不安全</h1>
+        <p id="headline" class="say"></p>
+      </section>
+
+      <ul class="stats">
+        <li>
+          <p class="num" id="n-file">0</p>
+          <p class="name">文件调用</p>
+          <p class="hint">看过或改过文件</p>
+        </li>
+        <li>
+          <p class="num" id="n-over">0</p>
+          <p class="name">超出范围</p>
+          <p class="hint">不在任务里，或太大</p>
+        </li>
+        <li>
+          <p class="num" id="n-command">0</p>
+          <p class="name">命令执行</p>
+          <p class="hint">跑过的命令</p>
+        </li>
+        <li>
+          <p class="num" id="n-high">0</p>
+          <p class="name">高危命令</p>
+          <p class="hint">会删除、推送或外发</p>
+        </li>
+        <li>
+          <p class="num" id="n-review">0</p>
+          <p class="name">审查过几份</p>
+          <p class="hint">启用前看过的说明</p>
+        </li>
+        <li>
+          <p class="num" id="n-bypass">0</p>
+          <p class="name">命中绕过几份</p>
+          <p class="hint">关掉检查或放大权限</p>
+        </li>
+      </ul>
+      <p class="note">高危的也算进命令里。命中绕过的也算进审查过的。</p>
+
+      <section id="risks">
+        <h2>要点开的</h2>
+        <p class="sub">点一行，看它做了什么、在不在任务里、拦住没有。</p>
+        <div id="list" class="list"></div>
+      </section>
+
+      <details id="safe-fold" class="safe-fold">
+        <summary id="safe-summary">还有 0 条是安全的，不用点开</summary>
+        <div id="safe-list" class="list"></div>
+      </details>
+    </div>
+
+    <div id="detail" hidden>
+      <button type="button" class="back" id="back">返回</button>
+      <section id="d-panel" class="verdict unsafe">
+        <p class="kicker">这条记录</p>
+        <h1 id="d-level">不安全</h1>
+      </section>
+      <div class="detail-body">
+        <h2>做了什么</h2>
+        <p id="d-what"></p>
+        <h2>在不在任务里</h2>
+        <p id="d-task"></p>
+        <h2>拦住没有</h2>
+        <p id="d-blocked"></p>
+        <div id="d-skill-block" hidden>
+          <h2>看了哪一份</h2>
+          <p id="d-skill"></p>
+          <h2>命中哪类</h2>
+          <p id="d-hit"></p>
+        </div>
+      </div>
+    </div>
+  </main>
+  <script>
+    (function () {
+      var LEVEL = { safe: "安全", suspected: "疑似不安全", unsafe: "不安全" };
+      var raw = [
+        { daysAgo: 0, kind: "file", over: false, high: false, bypass: false, level: "safe",
+          line: "读了登录页的文案，看现在写的是什么。",
+          what: "读了登录页的文案，看现在写的是什么。",
+          inTask: "在这次任务里。任务是改登录页文案。",
+          blocked: "没有拦住。" },
+        { daysAgo: 0, kind: "file", over: false, high: false, bypass: false, level: "safe",
+          line: "改了登录页上的那句提示。",
+          what: "改了登录页上的那句提示。",
+          inTask: "在这次任务里。任务是改登录页文案。",
+          blocked: "没有拦住。" },
+        { daysAgo: 0, kind: "command", over: false, high: false, bypass: false, level: "safe",
+          line: "跑了登录页相关的一次检查。",
+          what: "跑了登录页相关的一次检查。",
+          inTask: "在这次任务里。任务是改登录页文案。",
+          blocked: "没有拦住。" },
+        { daysAgo: 0, kind: "skill", over: false, high: false, bypass: false, level: "safe",
+          line: "看了「文案校对」的技能说明，没有要求关掉检查或放大权限。",
+          what: "看了「文案校对」的技能说明。",
+          inTask: "在这次任务里。启用前先看了这份说明。",
+          blocked: "没有拦住。",
+          skill: "「文案校对」的技能说明",
+          hit: "没有命中。" },
+        { daysAgo: 0, kind: "file", over: true, high: false, bypass: false, level: "unsafe",
+          line: "要改登录页文案，却去读了仓库外的密钥文件。",
+          what: "要改登录页文案，却去读了仓库外的密钥文件。",
+          inTask: "不在这次任务里。任务是改登录页文案。",
+          blocked: "没有拦住。当时是监测，只把这件事记下来。" },
+        { daysAgo: 0, kind: "skill", over: false, high: false, bypass: true, level: "unsafe",
+          line: "看了「自动发布」的技能说明，里面要求关掉监测。",
+          what: "看了「自动发布」的技能说明。里面要求关掉监测。",
+          inTask: "不在这次任务里。任务是改登录页文案，不是启用发布。",
+          blocked: "没有拦住。当时是监测，仍让它运行。",
+          skill: "「自动发布」的技能说明",
+          hit: "要求关闭监测或防护" },
+        { daysAgo: 3, kind: "file", over: false, high: false, bypass: false, level: "safe",
+          line: "读了设置页的说明，看现在写的是什么。",
+          what: "读了设置页的说明。",
+          inTask: "在这次任务里。任务是改设置页说明。",
+          blocked: "没有拦住。" },
+        { daysAgo: 3, kind: "command", over: true, high: true, bypass: false, level: "unsafe",
+          line: "要改设置页说明，却执行了推送到远端的命令。",
+          what: "要改设置页说明，却执行了推送到远端的命令。",
+          inTask: "不在这次任务里。任务是改设置页说明，没有要推送。",
+          blocked: "拦住了，这次没有执行。" },
+        { daysAgo: 3, kind: "skill", over: false, high: false, bypass: false, level: "safe",
+          line: "看了「格式整理」的技能说明，没有要求关掉检查或放大权限。",
+          what: "看了「格式整理」的技能说明。",
+          inTask: "在这次任务里。启用前先看了这份说明。",
+          blocked: "没有拦住。",
+          skill: "「格式整理」的技能说明",
+          hit: "没有命中。" },
+        { daysAgo: 3, kind: "file", over: true, high: false, bypass: false, level: "suspected",
+          line: "任务只要改设置页里的一个函数，却把整个文件都读进来了。",
+          what: "任务只要改设置页里的一个函数，却把整个文件都读进来了。",
+          inTask: "方向在这次任务里，但读的范围比需要的大。",
+          blocked: "没有拦住。当时是监测，只把这件事记下来。" },
+        { daysAgo: 6, kind: "command", over: false, high: false, bypass: false, level: "safe",
+          line: "跑了设置页相关的一次测试。",
+          what: "跑了设置页相关的一次测试。",
+          inTask: "在这次任务里。任务是改设置页说明。",
+          blocked: "没有拦住。" },
+        { daysAgo: 6, kind: "skill", over: false, high: false, bypass: true, level: "unsafe",
+          line: "看了「快捷安装」的技能说明，里面要求把能做的事放大。",
+          what: "看了「快捷安装」的技能说明。里面要求把能做的事放大。",
+          inTask: "不在这次任务里。任务是改设置页说明，不是启用安装。",
+          blocked: "拦住了，没有启用这份技能。",
+          skill: "「快捷安装」的技能说明",
+          hit: "扩大允许范围" },
+        { daysAgo: 6, kind: "file", over: false, high: false, bypass: false, level: "safe",
+          line: "改了设置页的一句说明。",
+          what: "改了设置页的一句说明。",
+          inTask: "在这次任务里。任务是改设置页说明。",
+          blocked: "没有拦住。" },
+        { daysAgo: 6, kind: "skill", over: false, high: false, bypass: false, level: "suspected",
+          line: "准备看「批量改写」的技能说明，正文没有读到。",
+          what: "准备看「批量改写」的技能说明，正文没有读到。",
+          inTask: "方向是启用前先审查，但这份说明没有读完。",
+          blocked: "没有启用。审查没有做完。",
+          skill: "「批量改写」的技能说明",
+          hit: "没有命中。审查没有做完。" },
+        { daysAgo: 10, kind: "file", over: false, high: false, bypass: false, level: "safe",
+          line: "读了关于页的文案。",
+          what: "读了关于页的文案。",
+          inTask: "在这次任务里。任务是改关于页文案。",
+          blocked: "没有拦住。" },
+        { daysAgo: 10, kind: "command", over: false, high: true, bypass: false, level: "suspected",
+          line: "按你的点名，准备删除「旧公告」这个文件。",
+          what: "按你的点名，准备删除「旧公告」这个文件。",
+          inTask: "在这次任务里。你点名要删的就是这个文件。",
+          blocked: "先停着，还没有执行，等你确认。" },
+        { daysAgo: 10, kind: "skill", over: false, high: false, bypass: false, level: "safe",
+          line: "看了「链接检查」的技能说明，没有要求关掉检查或放大权限。",
+          what: "看了「链接检查」的技能说明。",
+          inTask: "在这次任务里。启用前先看了这份说明。",
+          blocked: "没有拦住。",
+          skill: "「链接检查」的技能说明",
+          hit: "没有命中。" },
+        { daysAgo: 20, kind: "file", over: true, high: false, bypass: false, level: "unsafe",
+          line: "查说明的时候，把查找范围扩到了整个主目录。",
+          what: "查说明的时候，把查找范围扩到了整个主目录。",
+          inTask: "不在这次任务里。任务只查仓库里的说明。",
+          blocked: "没有拦住。当时是监测，只把这件事记下来。" },
+        { daysAgo: 20, kind: "skill", over: false, high: false, bypass: true, level: "unsafe",
+          line: "看了「记录清理」的技能说明，里面让不要留下审查记录。",
+          what: "看了「记录清理」的技能说明。里面让不要留下审查记录。",
+          inTask: "不在这次任务里。任务是查仓库里的说明。",
+          blocked: "没有拦住。当时是监测，仍让它运行。",
+          skill: "「记录清理」的技能说明",
+          hit: "指示不要记录审计" },
+        { daysAgo: 40, kind: "command", over: false, high: false, bypass: false, level: "safe",
+          line: "跑了旧页面相关的一次检查。",
+          what: "跑了旧页面相关的一次检查。",
+          inTask: "在这次任务里。任务是整理旧页面。",
+          blocked: "没有拦住。" },
+        { daysAgo: 40, kind: "skill", over: false, high: false, bypass: true, level: "unsafe",
+          line: "看了「外部拉取」的技能说明，里面把要做的事藏进工具输出再执行。",
+          what: "看了「外部拉取」的技能说明。里面把要做的事藏进工具输出，再当成要执行的指示。",
+          inTask: "不在这次任务里。任务是整理旧页面。",
+          blocked: "拦住了，没有启用这份技能。",
+          skill: "「外部拉取」的技能说明",
+          hit: "藏入文件或工具输出后再执行" },
+        { daysAgo: 40, kind: "file", over: false, high: false, bypass: false, level: "safe",
+          line: "读了旧页面的说明。",
+          what: "读了旧页面的说明。",
+          inTask: "在这次任务里。任务是整理旧页面。",
+          blocked: "没有拦住。" }
+      ];
+
+      function startOfDay(d) {
+        return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0);
+      }
+      function endOfDay(d) {
+        return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999);
+      }
+      function addDays(d, n) {
+        return new Date(d.getFullYear(), d.getMonth(), d.getDate() + n, 12, 0, 0, 0);
+      }
+      function pad(n) { return (n < 10 ? "0" : "") + n; }
+      function toInput(d) {
+        return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate());
+      }
+      function parseInput(value) {
+        if (!value) return null;
+        var parts = value.split("-");
+        if (parts.length !== 3) return null;
+        var y = Number(parts[0]), m = Number(parts[1]), day = Number(parts[2]);
+        if (!y || !m || !day) return null;
+        return new Date(y, m - 1, day, 12, 0, 0, 0);
+      }
+      function formatDay(d) {
+        return (d.getMonth() + 1) + "月" + d.getDate() + "日";
+      }
+
+      var now = new Date();
+      var events = raw.map(function (item, index) {
+        var copy = {};
+        for (var key in item) copy[key] = item[key];
+        copy.date = addDays(now, -item.daysAgo);
+        copy.id = "e" + index;
+        return copy;
+      });
+
+      var mode = "week";
+      document.getElementById("start").value = toInput(addDays(now, -44));
+      document.getElementById("end").value = toInput(addDays(now, 0));
+
+      function currentRange() {
+        if (mode === "day") return { start: startOfDay(now), end: endOfDay(now), bad: false };
+        if (mode === "week") return { start: startOfDay(addDays(now, -6)), end: endOfDay(now), bad: false };
+        if (mode === "month") return { start: startOfDay(addDays(now, -29)), end: endOfDay(now), bad: false };
+        var startValue = parseInput(document.getElementById("start").value);
+        var endValue = parseInput(document.getElementById("end").value);
+        if (!startValue || !endValue) return { start: null, end: null, bad: true, empty: true };
+        if (startValue.getTime() > endValue.getTime()) return { start: startValue, end: endValue, bad: true };
+        return { start: startOfDay(startValue), end: endOfDay(endValue), bad: false };
+      }
+
+      function inRange(event, range) {
+        if (!range.start || !range.end) return false;
+        return event.date.getTime() >= range.start.getTime() && event.date.getTime() <= range.end.getTime();
+      }
+
+      function tally(list) {
+        var out = { file: 0, over: 0, command: 0, high: 0, review: 0, bypass: 0, unsafe: 0, suspected: 0 };
+        list.forEach(function (item) {
+          if (item.kind === "file") out.file += 1;
+          if (item.over) out.over += 1;
+          if (item.kind === "command") out.command += 1;
+          if (item.high) out.high += 1;
+          if (item.kind === "skill") out.review += 1;
+          if (item.bypass) out.bypass += 1;
+          if (item.level === "unsafe") out.unsafe += 1;
+          if (item.level === "suspected") out.suspected += 1;
+        });
+        return out;
+      }
+
+      function setText(id, text) {
+        document.getElementById(id).textContent = text;
+      }
+
+      function fill(container, items, openable) {
+        container.replaceChildren();
+        items.forEach(function (item) {
+          var row = document.createElement(openable ? "button" : "div");
+          row.className = (openable ? "risk " : "quiet ") + item.level;
+          if (openable) {
+            row.type = "button";
+            row.setAttribute("data-id", item.id);
+          }
+          var main = document.createElement("div");
+          var meta = document.createElement("div");
+          meta.className = "meta";
+          meta.textContent = formatDay(item.date);
+          var line = document.createElement("div");
+          line.className = "line";
+          line.textContent = item.line;
+          main.appendChild(meta);
+          main.appendChild(line);
+          var side = document.createElement("div");
+          side.className = "side";
+          side.textContent = LEVEL[item.level];
+          if (openable) {
+            var open = document.createElement("span");
+            open.className = "open";
+            open.textContent = "查看";
+            side.appendChild(document.createElement("br"));
+            side.appendChild(open);
+          }
+          row.appendChild(main);
+          row.appendChild(side);
+          container.appendChild(row);
+        });
+      }
+
+      function renderHome() {
+        document.getElementById("home").hidden = false;
+        document.getElementById("detail").hidden = true;
+        document.querySelectorAll(".ranges button").forEach(function (button) {
+          button.setAttribute("aria-pressed", button.getAttribute("data-range") === mode ? "true" : "false");
+        });
+        document.getElementById("custom").hidden = mode !== "custom";
+        var range = currentRange();
+        var error = document.getElementById("range-error");
+        error.hidden = !(mode === "custom" && range.bad && !range.empty);
+        var picked = events.filter(function (item) { return inRange(item, range); });
+        var rank = { unsafe: 0, suspected: 1, safe: 2 };
+        picked.sort(function (a, b) {
+          if (rank[a.level] !== rank[b.level]) return rank[a.level] - rank[b.level];
+          return b.date.getTime() - a.date.getTime();
+        });
+        var numbers = tally(picked);
+        function put(id, value, hot) {
+          var node = document.getElementById(id);
+          node.textContent = String(value);
+          node.parentElement.classList.toggle("hot", !!(hot && value > 0));
+        }
+        put("n-file", numbers.file, false);
+        put("n-over", numbers.over, true);
+        put("n-command", numbers.command, false);
+        put("n-high", numbers.high, true);
+        put("n-review", numbers.review, false);
+        put("n-bypass", numbers.bypass, true);
+
+        var label = document.getElementById("range-label");
+        if (range.bad) label.textContent = range.empty ? "请把开始日期和结束日期都选上。" : "";
+        else label.textContent = formatDay(range.start) + " 到 " + formatDay(range.end);
+
+        var verdict = document.getElementById("verdict");
+        var word = document.getElementById("verdict-word");
+        var headline = document.getElementById("headline");
+        if (range.bad) {
+          verdict.className = "verdict empty";
+          word.textContent = "请改日期";
+          headline.textContent = "";
+        } else if (picked.length === 0) {
+          verdict.className = "verdict empty";
+          word.textContent = "没有记录";
+          headline.textContent = "这段时间没有发生过事。";
+        } else if (numbers.unsafe > 0) {
+          verdict.className = "verdict unsafe";
+          word.textContent = "不安全";
+          headline.textContent = "有 " + numbers.unsafe + " 条要看" + (numbers.suspected ? "，还有 " + numbers.suspected + " 条拿不准" : "") + "。";
+        } else if (numbers.suspected > 0) {
+          verdict.className = "verdict suspected";
+          word.textContent = "疑似不安全";
+          headline.textContent = "有 " + numbers.suspected + " 条拿不准，先看一下。";
+        } else {
+          verdict.className = "verdict safe";
+          word.textContent = "安全";
+          headline.textContent = "这些记录都在任务里。";
+        }
+
+        var openItems = picked.filter(function (item) { return item.level !== "safe"; });
+        var safeItems = picked.filter(function (item) { return item.level === "safe"; });
+        document.getElementById("risks").hidden = openItems.length === 0;
+        fill(document.getElementById("list"), openItems, true);
+        var fold = document.getElementById("safe-fold");
+        fold.hidden = safeItems.length === 0;
+        fold.open = false;
+        document.getElementById("safe-summary").textContent = "还有 " + safeItems.length + " 条是安全的，不用点开";
+        fill(document.getElementById("safe-list"), safeItems, false);
+      }
+
+      function showDetail(item) {
+        if (!item || item.level === "safe") return;
+        document.getElementById("home").hidden = true;
+        document.getElementById("detail").hidden = false;
+        var panel = document.getElementById("d-panel");
+        panel.className = "verdict " + item.level;
+        var level = document.getElementById("d-level");
+        level.textContent = LEVEL[item.level];
+        setText("d-what", item.what);
+        setText("d-task", item.inTask);
+        setText("d-blocked", item.blocked);
+        var skillBlock = document.getElementById("d-skill-block");
+        if (item.kind === "skill") {
+          skillBlock.hidden = false;
+          setText("d-skill", item.skill);
+          setText("d-hit", item.hit);
+        } else {
+          skillBlock.hidden = true;
+          setText("d-skill", "");
+          setText("d-hit", "");
+        }
+        document.getElementById("back").focus();
+      }
+
+      document.querySelector(".ranges").addEventListener("click", function (event) {
+        var button = event.target.closest("button");
+        if (!button) return;
+        mode = button.getAttribute("data-range");
+        renderHome();
+      });
+      document.getElementById("start").addEventListener("change", function () {
+        mode = "custom";
+        renderHome();
+      });
+      document.getElementById("end").addEventListener("change", function () {
+        mode = "custom";
+        renderHome();
+      });
+      document.getElementById("list").addEventListener("click", function (event) {
+        var button = event.target.closest("button");
+        if (!button) return;
+        var id = button.getAttribute("data-id");
+        showDetail(events.filter(function (entry) { return entry.id === id; })[0]);
+      });
+      document.getElementById("back").addEventListener("click", function () {
+        renderHome();
+        document.getElementById("range-" + mode).focus();
+      });
+
+      renderHome();
+    })();
+  </script>
+</body>
+</html>
